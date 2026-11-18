@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}{{ target['domain'] }} — ReconScope{% endblock %}
+
+{% block body %}
+<p class="back"><a href="{{ url_for('index') }}">&larr; All targets</a></p>
+<h1 class="mono" style="margin:4px 0 20px;">{{ target['domain'] }}</h1>
+
+{% if not scan %}
+  <div class="panel"><p class="muted">No scan data yet.</p></div>
+{% else %}
+
+{% set s = scan['summary'] %}
+<div class="cards" style="margin-bottom:20px;">
+  <div class="card"><div class="n">{{ s['subdomains'] }}</div><div class="l">Subdomains</div></div>
+  <div class="card"><div class="n">{{ s['open_ports'] }}</div><div class="l">Open ports</div></div>
+  <div class="card"><div class="n">{{ s['emails'] }}</div><div class="l">Emails</div></div>
+  <div class="card"><div class="n">{{ s['dns_records'] }}</div><div class="l">DNS records</div></div>
+</div>
+
+<div class="grid2">
+  <div class="panel">
+    <h2>Findings over time</h2>
+    <div class="chartbox"><canvas id="trendChart"></canvas></div>
+  </div>
+  <div class="panel">
+    <h2>Exposed ports</h2>
+    <div class="chartbox"><canvas id="portChart"></canvas></div>
+  </div>
+</div>
+
+<!-- WHOIS -->
+<div class="panel">
+  <h2>WHOIS</h2>
+  {% set w = scan['whois'] %}
+  {% if w['ok'] %}
+  <div class="kv">
+    <div class="k">Registrar</div><div>{{ w['data']['registrar'] or '—' }}</div>
+    <div class="k">Created</div><div class="mono">{{ w['data']['created'] or '—' }}</div>
+    <div class="k">Expires</div><div class="mono">{{ w['data']['expires'] or '—' }}</div>
+    <div class="k">Registrant org</div><div>{{ w['data']['registrant_org'] or '—' }}</div>
+    <div class="k">Country</div><div>{{ w['data']['country'] or '—' }}</div>
+    <div class="k">Name servers</div>
+    <div class="taglist">
+      {% for ns in w['data']['name_servers'] %}<span class="tag">{{ ns }}</span>{% else %}—{% endfor %}
+    </div>
+  </div>
+  {% else %}<p class="muted">Unavailable: {{ w['error'] }}</p>{% endif %}
+</div>
+
+<!-- Subdomains -->
+<div class="panel">
+  <h2>Subdomains (crt.sh) {% if scan['crtsh']['ok'] %}<span class="muted">— {{ scan['crtsh']['data']['count'] }}</span>{% endif %}</h2>
+  {% if scan['crtsh']['ok'] %}
+    <div class="taglist">
+      {% for sub in scan['crtsh']['data']['subdomains'] %}<span class="tag">{{ sub }}</span>{% else %}
+      <span class="muted">None found.</span>{% endfor %}
+    </div>
+  {% else %}<p class="muted">Unavailable: {{ scan['crtsh']['error'] }}</p>{% endif %}
+</div>
+
+<!-- DNS + Shodan -->
+<div class="grid2">
+  <div class="panel">
+    <h2>DNS records</h2>
+    {% if scan['dns']['ok'] %}
+      {% for rtype, vals in scan['dns']['data']['records'].items() %}
+        <div class="kv" style="margin-bottom:6px;">
+          <div class="k">{{ rtype }}</div>
+          <div class="taglist">
+            {% for v in vals %}<span class="tag">{{ v }}</span>{% else %}<span class="muted">—</span>{% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}<p class="muted">Unavailable: {{ scan['dns']['error'] }}</p>{% endif %}
+  </div>
+
+  <div class="panel">
+    <h2>Shodan</h2>
+    {% if scan['shodan']['ok'] %}
+      {% set sh = scan['shodan']['data'] %}
+      <div class="kv">
+        <div class="k">IP</div><div class="mono">{{ sh['ip'] }}</div>
+        <div class="k">Org</div><div>{{ sh['org'] or '—' }}</div>
+      </div>
+      <table style="margin-top:12px;">
+        <thead><tr><th>Port</th><th>Service</th></tr></thead>
+        <tbody>
+          {% for svc in sh['services'] %}
+          <tr><td class="mono">{{ svc['port'] }}/{{ svc['transport'] }}</td>
+              <td>{{ svc['product'] or '—' }}</td></tr>
+          {% else %}<tr><td colspan="2" class="muted">No exposed services.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    {% else %}<p class="muted">Unavailable: {{ scan['shodan']['error'] }}</p>{% endif %}
+  </div>
+</div>
+
+<!-- Emails -->
+<div class="panel">
+  <h2>Publicly listed emails {% if scan['emails']['ok'] %}<span class="muted">— {{ scan['emails']['data']['count'] }}</span>{% endif %}</h2>
+  {% if scan['emails']['ok'] %}
+    <div class="taglist">
+      {% for e in scan['emails']['data']['emails'] %}<span class="tag">{{ e }}</span>{% else %}
+      <span class="muted">None found.</span>{% endfor %}
+    </div>
+  {% else %}<p class="muted">Unavailable: {{ scan['emails']['error'] }}</p>{% endif %}
+</div>
+
+<p class="muted mono" style="font-size:12.5px;">Scanned at {{ scan['scanned_at'] }} &middot; {{ scan_count }} scan(s) on record</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if scan %}
+<script src="{{ url_for('static', filename='chart.umd.min.js') }}"></script>
+<script>
+const GRID = "#30363d", TEXT = "#8b949e";
+Chart.defaults.color = TEXT;
+Chart.defaults.borderColor = GRID;
+
+// Port breakdown (doughnut) from the latest scan
+const portData = {{ scan['shodan']['data']['ports']|tojson if scan['shodan']['ok'] else '[]'|safe }};
+new Chart(document.getElementById("portChart"), {
+  type: "doughnut",
+  data: {
+    labels: portData.length ? portData.map(p => "Port " + p) : ["No exposed ports"],
+    datasets: [{
+      data: portData.length ? portData.map(() => 1) : [1],
+      backgroundColor: portData.length
+        ? ["#2f81f7","#3fb950","#d29922","#f85149","#a371f7","#db61a2","#1f6feb","#56d364"]
+        : ["#30363d"],
+      borderColor: "#161b22", borderWidth: 2,
+    }]
+  },
+  options: { plugins: { legend: { position: "right" } }, maintainAspectRatio: false }
+});
+
+// Trend chart — fetched from the JSON API so it always reflects stored history
+fetch("{{ url_for('trends', target_id=target['id']) }}")
+  .then(r => r.json())
+  .then(d => {
+    const mk = (label, data, color) => ({
+      label, data, borderColor: color, backgroundColor: color + "33",
+      tension: .3, fill: false, pointRadius: 3,
+    });
+    new Chart(document.getElementById("trendChart"), {
+      type: "line",
+      data: {
+        labels: d.labels.map(x => x.replace("T", " ").replace("Z", "")),
+        datasets: [
+          mk("Subdomains", d.subdomains, "#2f81f7"),
+          mk("Open ports", d.open_ports, "#f85149"),
+          mk("Emails", d.emails, "#3fb950"),
+        ]
+      },
+      options: {
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+        plugins: { legend: { position: "top" } }
+      }
+    });
+  });
+</script>
+{% endif %}
+{% endblock %}

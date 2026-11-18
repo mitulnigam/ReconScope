@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}OSINT Dashboard{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><span>&#9673;</span> Recon<span>Scope</span>
+      &nbsp;<small>OSINT aggregation dashboard</small></div>
+    <a class="back" href="{{ url_for('index') }}">Dashboard</a>
+  </div>
+  <div class="notice">
+    For authorized use only &middot; all data is gathered from public sources &middot;
+    query domains you own or are permitted to assess
+  </div>
+  <div class="wrap">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% block body %}{% endblock %}
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

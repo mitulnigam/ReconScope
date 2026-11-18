@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — ReconScope{% endblock %}
+
+{% block body %}
+<div class="panel">
+  <h2>New scan</h2>
+  <form class="scanform" method="post" action="{{ url_for('scan') }}">
+    <input type="text" name="domain" placeholder="example.com" autofocus
+           autocomplete="off">
+    <button type="submit">Run scan</button>
+  </form>
+  <p class="muted" style="margin:12px 0 0; font-size:13px;">
+    Aggregates WHOIS, Certificate Transparency subdomains (crt.sh), DNS records,
+    exposed ports (Shodan), and publicly listed emails.
+  </p>
+</div>
+
+<div class="panel">
+  <h2>Targets ({{ targets|length }})</h2>
+  {% if targets %}
+  <table>
+    <thead>
+      <tr>
+        <th>Domain</th><th>Subdomains</th><th>Open ports</th>
+        <th>Emails</th><th>Scans</th><th>Last scan</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in targets %}
+      <tr>
+        <td><a href="{{ url_for('target', target_id=t['id']) }}" class="mono">{{ t['domain'] }}</a></td>
+        <td>{{ t['subdomains'] or 0 }}</td>
+        <td>{{ t['open_ports'] or 0 }}</td>
+        <td>{{ t['emails'] or 0 }}</td>
+        <td>{{ t['scan_count'] }}</td>
+        <td class="muted mono">{{ t['last_scan'] or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No targets yet. Run a scan above to get started.</p>
+  {% endif %}
+</div>
+{% endblock %}
